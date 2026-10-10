@@ -6,7 +6,9 @@ import '../models/remote_entry.dart';
 import '../services/file_service.dart';
 import '../services/host_store.dart';
 import '../services/ssh_service.dart';
+import '../services/transfer_service.dart';
 import '../theme.dart';
+import '../util/format.dart';
 import '../widgets/file_preview.dart';
 import '../widgets/file_tree.dart';
 import '../widgets/terminal_pane.dart';
@@ -79,6 +81,127 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
         _error = e;
         _connecting = false;
       });
+    }
+  }
+
+  /// Anchor rect for the iPad share popover.
+  Rect? _shareOrigin() {
+    final box = context.findRenderObject();
+    if (box is! RenderBox || !box.hasSize) return null;
+    return box.localToGlobal(Offset.zero) & box.size;
+  }
+
+  void _snack(String text) {
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
+  }
+
+  Future<void> _download(RemoteEntry entry) async {
+    final files = _files;
+    if (files == null) return;
+    final progress = ValueNotifier<double?>(null);
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) =>
+          _ProgressDialog(title: '下载 ${entry.name}', progress: progress),
+    ).ignore();
+    String? message;
+    Object? error;
+    try {
+      message = await Transfers.download(
+        files,
+        entry,
+        onProgress: (f) => progress.value = f,
+        shareOrigin: _shareOrigin(),
+      );
+    } catch (e) {
+      error = e;
+    }
+    if (!mounted) return;
+    Navigator.of(context, rootNavigator: true).pop();
+    progress.dispose();
+    _snack(error != null ? '下载失败：$error' : (message ?? '已取消'));
+  }
+
+  Future<void> _uploadInto(String dir) async {
+    final files = _files;
+    if (files == null) return;
+    final progress = ValueNotifier<double?>(null);
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => _ProgressDialog(title: '上传中…', progress: progress),
+    ).ignore();
+    List<String> uploaded = const [];
+    Object? error;
+    try {
+      uploaded = await Transfers.upload(
+        files,
+        dir,
+        onProgress: (_, f) => progress.value = f,
+      );
+    } catch (e) {
+      error = e;
+    }
+    if (!mounted) return;
+    Navigator.of(context, rootNavigator: true).pop();
+    progress.dispose();
+    if (error != null) {
+      _snack('上传失败：$error');
+      return;
+    }
+    if (uploaded.isEmpty) {
+      _snack('已取消');
+      return;
+    }
+    await _treeKey.currentState?.reloadPath(dir);
+    if (mounted) _snack('已上传 ${uploaded.length} 个文件到 $dir');
+  }
+
+  /// Long-press menu for a tree row: download a file, or upload into a folder.
+  Future<void> _showEntryMenu(RemoteEntry entry) async {
+    final action = await showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: AppTheme.surface,
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              title: Text(
+                entry.name,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontWeight: FontWeight.w600),
+              ),
+              subtitle: Text(
+                entry.isDirectory ? '目录' : humanSize(entry.size),
+                style: const TextStyle(color: AppTheme.textDim, fontSize: 12),
+              ),
+            ),
+            const Divider(height: 1),
+            if (entry.isDirectory)
+              ListTile(
+                leading: const Icon(Icons.upload_file_rounded),
+                title: const Text('上传文件到此目录'),
+                onTap: () => Navigator.of(ctx).pop('upload'),
+              )
+            else
+              ListTile(
+                leading: const Icon(Icons.download_rounded),
+                title: const Text('下载到本机'),
+                onTap: () => Navigator.of(ctx).pop('download'),
+              ),
+            const SizedBox(height: 6),
+          ],
+        ),
+      ),
+    );
+    if (!mounted || action == null) return;
+    if (action == 'upload') {
+      await _uploadInto(entry.path);
+    } else if (action == 'download') {
+      await _download(entry);
     }
   }
 
@@ -179,12 +302,18 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
           ],
         ),
         actions: [
-          if (_tab == 0)
+          if (_tab == 0) ...[
+            IconButton(
+              tooltip: '上传文件到主目录',
+              onPressed: () => _uploadInto(_home ?? '/'),
+              icon: const Icon(Icons.upload_file_rounded),
+            ),
             IconButton(
               tooltip: '刷新文件树',
               onPressed: () => _treeKey.currentState?.refresh(),
               icon: const Icon(Icons.refresh_rounded),
             ),
+          ],
         ],
       ),
       body: _body(),
@@ -233,6 +362,8 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
           rootPath: _home ?? '/',
           rootLabel: _home ?? '/',
           treeKey: _treeKey,
+          onEntryLongPress: _showEntryMenu,
+          onDownload: _download,
         ),
         _TerminalsView(
           terminals: _terminals,
@@ -263,12 +394,16 @@ class _FileBrowser extends StatefulWidget {
     required this.rootPath,
     required this.rootLabel,
     required this.treeKey,
+    required this.onEntryLongPress,
+    required this.onDownload,
   });
 
   final RemoteFiles files;
   final String rootPath;
   final String rootLabel;
   final GlobalKey<FileTreeState> treeKey;
+  final ValueChanged<RemoteEntry> onEntryLongPress;
+  final ValueChanged<RemoteEntry> onDownload;
 
   @override
   State<_FileBrowser> createState() => _FileBrowserState();
@@ -289,6 +424,7 @@ class _FileBrowserState extends State<_FileBrowser> {
           rootLabel: widget.rootLabel,
           selectedPath: _selected?.path,
           onOpenFile: (entry) => setState(() => _selected = entry),
+          onLongPress: widget.onEntryLongPress,
         );
 
         if (wide) {
@@ -321,6 +457,7 @@ class _FileBrowserState extends State<_FileBrowser> {
       files: widget.files,
       entry: selected,
       onBack: showBack ? () => setState(() => _selected = null) : null,
+      onDownload: () => widget.onDownload(selected),
     );
   }
 }
@@ -490,6 +627,45 @@ class _ErrorState extends StatelessWidget {
               style: FilledButton.styleFrom(minimumSize: const Size(150, 46)),
               icon: const Icon(Icons.refresh_rounded),
               label: const Text('重试'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Blocking dialog that shows transfer progress; [progress] is a 0..1 fraction
+/// or null for "indeterminate" (total size unknown).
+class _ProgressDialog extends StatelessWidget {
+  const _ProgressDialog({required this.title, required this.progress});
+
+  final String title;
+  final ValueNotifier<double?> progress;
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text(
+        title,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: const TextStyle(fontSize: 16),
+      ),
+      content: ValueListenableBuilder<double?>(
+        valueListenable: progress,
+        builder: (context, value, _) => Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            LinearProgressIndicator(value: value),
+            const SizedBox(height: 12),
+            Text(
+              value == null
+                  ? '传输中…'
+                  : '${(value * 100).clamp(0, 100).toStringAsFixed(0)}%',
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: AppTheme.textDim, fontSize: 12),
             ),
           ],
         ),

@@ -8,7 +8,8 @@ import '../util/format.dart';
 /// Expandable, lazily-loaded remote directory tree.
 ///
 /// Directories load their children on first expand; files are leaves that
-/// report back via [onOpenFile].
+/// report back via [onOpenFile]. Long-pressing a row reports it via
+/// [onLongPress] so the host can offer per-entry actions (download / upload).
 class FileTree extends StatefulWidget {
   const FileTree({
     super.key,
@@ -16,6 +17,7 @@ class FileTree extends StatefulWidget {
     required this.rootPath,
     required this.rootLabel,
     required this.onOpenFile,
+    this.onLongPress,
     this.selectedPath,
   });
 
@@ -23,6 +25,7 @@ class FileTree extends StatefulWidget {
   final String rootPath;
   final String rootLabel;
   final ValueChanged<RemoteEntry> onOpenFile;
+  final ValueChanged<RemoteEntry>? onLongPress;
   final String? selectedPath;
 
   @override
@@ -67,6 +70,30 @@ class FileTreeState extends State<FileTree> {
     final root = _makeRoot();
     await _load(root);
     if (mounted) setState(() => _root = root);
+  }
+
+  /// Re-reads just the directory at [path] (used after an upload lands there),
+  /// so the rest of the expanded tree stays put. Falls back to a full refresh
+  /// when that directory isn't part of the loaded tree.
+  Future<void> reloadPath(String path) async {
+    final node = _findByPath(_root, path);
+    if (node == null) {
+      await refresh();
+      return;
+    }
+    node.children = null;
+    node.error = null;
+    node.expanded = true;
+    await _load(node);
+  }
+
+  _Node? _findByPath(_Node node, String path) {
+    if (node.entry.path == path) return node;
+    for (final child in node.children ?? const <_Node>[]) {
+      final hit = _findByPath(child, path);
+      if (hit != null) return hit;
+    }
+    return null;
   }
 
   Future<void> _load(_Node node) async {
@@ -127,6 +154,9 @@ class FileTreeState extends State<FileTree> {
         widget.selectedPath == e.path;
     return InkWell(
       onTap: () => _toggle(node),
+      onLongPress: widget.onLongPress == null
+          ? null
+          : () => widget.onLongPress!(e),
       child: Container(
         color: selected ? AppTheme.accent.withValues(alpha: 0.16) : null,
         padding: EdgeInsets.fromLTRB(6 + node.depth * 16, 7, 10, 7),

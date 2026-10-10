@@ -17,6 +17,9 @@ no server side**: the phone runs its own SSH client (`dartssh2`) and connects di
   the platform secure store (Android Keystore / iOS Keychain), never in plaintext.
 - **Files**: an expandable, lazily-loaded directory tree; tap a file to preview it on the right —
   text with line numbers, images with pinch-zoom, binary as a hex dump.
+- **Upload / download** (VS Code sidebar style): **long-press a file** → "download to device",
+  **long-press a folder** → "upload files into this folder"; the preview pane also has a download
+  button and the app bar an "upload to home" action. Transfers show a progress bar.
 - **Terminals**: multiple tabs, each an independent shell; a new terminal can take a **startup
   command** (e.g. `claude`) that runs automatically once connected.
 - **Voice input**: the terminal toolbar's "⌨ 语音" button raises the system IME — speak with the
@@ -45,6 +48,16 @@ Host list ──tap a host──▶ Workspace
 Because it uses your keyboard's own speech engine, Chinese accuracy and offline behaviour depend on
 the IME you have installed (Gboard, Sogou, iFlytek, WeChat Keyboard, … all work). It applies equally
 to TUI apps like `claude`: speaking is typing, Enter submits.
+
+## Upload / download
+
+- **Download**: long-press a file → "download to device", or tap the ⬇ in the preview header.
+  Files under 64 MB open the system "save as" dialog; larger ones stream to a temp file and then the
+  share sheet (so you can save or forward them) — a big download never has to fit in memory.
+- **Upload**: long-press a **folder** → "upload files into this folder", or tap ⬆ in the app bar to
+  upload into the home directory. Multi-select is supported.
+- Transfers run behind a progress dialog; on completion only the affected folder reloads, so the rest
+  of the expanded tree stays put.
 
 ## Using it with Tailscale
 
@@ -131,7 +144,7 @@ lib/
 
 ## Limitations / roadmap
 
-- Files are currently **read-only**; upload / download / edit are on the roadmap.
+- Editing / deleting remote files isn't supported yet (upload and download are).
 - No server fingerprint verification (see above).
 - No built-in speech recognition — deliberately, so your own IME's dictation stays the most accurate
   and least fussy option.

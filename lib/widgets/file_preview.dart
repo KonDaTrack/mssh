@@ -16,6 +16,7 @@ class FilePreview extends StatefulWidget {
     required this.files,
     required this.entry,
     this.onBack,
+    this.onDownload,
   });
 
   final RemoteFiles files;
@@ -23,6 +24,9 @@ class FilePreview extends StatefulWidget {
 
   /// When non-null, renders a back button in the header (narrow layout).
   final VoidCallback? onBack;
+
+  /// When non-null, renders a download action in the header.
+  final VoidCallback? onDownload;
 
   @override
   State<FilePreview> createState() => _FilePreviewState();
@@ -118,6 +122,13 @@ class _FilePreviewState extends State<FilePreview> {
             '${widget.entry.modified != null ? "  ·  ${formatWhen(widget.entry.modified)}" : ""}',
             style: const TextStyle(color: AppTheme.textDim, fontSize: 11.5),
           ),
+          if (widget.onDownload != null)
+            IconButton(
+              visualDensity: VisualDensity.compact,
+              tooltip: '下载到本机',
+              onPressed: widget.onDownload,
+              icon: const Icon(Icons.download_rounded, size: 20),
+            ),
         ],
       ),
     );

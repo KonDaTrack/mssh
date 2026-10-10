@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:dartssh2/dartssh2.dart';
@@ -5,7 +6,7 @@ import 'package:dartssh2/dartssh2.dart';
 import '../models/remote_entry.dart';
 import '../util/format.dart';
 
-/// Read-only SFTP sugar: list a directory, read a file.
+/// SFTP sugar: list a directory, read a file, and stream uploads/downloads.
 class RemoteFiles {
   RemoteFiles(this._sftp);
 
@@ -46,6 +47,54 @@ class RemoteFiles {
         if (size > maxBytes) length = maxBytes;
       }
       return await file.readBytes(length: length);
+    } finally {
+      await file.close();
+    }
+  }
+
+  /// Size of a remote file in bytes, or null when the server doesn't report it.
+  Future<int?> sizeOf(String path) async {
+    final attrs = await _sftp.stat(path);
+    return attrs.size;
+  }
+
+  /// Streams a remote file to [localPath], reporting cumulative bytes so a
+  /// progress UI can be driven from it.
+  Future<void> downloadTo(
+    String remotePath,
+    String localPath, {
+    void Function(int bytes)? onProgress,
+  }) async {
+    final file = await _sftp.open(remotePath, mode: SftpFileOpenMode.read);
+    try {
+      await file.downloadTo(
+        File(localPath).openWrite(),
+        closeDestination: true,
+        onProgress: onProgress,
+      );
+    } finally {
+      await file.close();
+    }
+  }
+
+  /// Streams [data] to [remotePath], creating or overwriting it.
+  ///
+  /// Takes a stream rather than a path because Android's file picker often
+  /// returns a `content://` URI with no filesystem path.
+  Future<void> uploadStream(
+    Stream<Uint8List> data,
+    String remotePath, {
+    void Function(int bytes)? onProgress,
+  }) async {
+    final file = await _sftp.open(
+      remotePath,
+      mode: SftpFileOpenMode.create |
+          SftpFileOpenMode.write |
+          SftpFileOpenMode.truncate,
+    );
+    try {
+      final writer = file.write(data, onProgress: onProgress);
+      await writer.done;
     } finally {
       await file.close();
     }
