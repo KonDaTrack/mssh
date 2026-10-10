@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../models/credential.dart';
 import '../models/host.dart';
 import '../services/host_store.dart';
+import '../services/tailscale_service.dart';
 import '../theme.dart';
 
 /// Add or edit a host. Secrets are written to the secure store on save.
@@ -32,6 +33,13 @@ class _HostEditScreenState extends State<HostEditScreen> {
   bool _saving = false;
   bool _loadingSecrets = false;
 
+  // Tailscale device picker.
+  List<TailscaleDevice>? _devices;
+  bool _devicesLoading = false;
+  String? _devicesError;
+  bool _hasTailscaleKey = false;
+  String? _pickedDevice;
+
   bool get _isNew => widget.existing == null;
 
   @override
@@ -49,6 +57,7 @@ class _HostEditScreenState extends State<HostEditScreen> {
     if (h != null) {
       _loadSecrets(h.id);
     }
+    _initTailscale();
   }
 
   Future<void> _loadSecrets(String id) async {
@@ -59,6 +68,197 @@ class _HostEditScreenState extends State<HostEditScreen> {
     _privateKey.text = cred.privateKeyPem ?? '';
     _passphrase.text = cred.passphrase ?? '';
     setState(() => _loadingSecrets = false);
+  }
+
+  Future<void> _initTailscale() async {
+    final key = await TailscaleService.apiKey();
+    if (!mounted) return;
+    final hasKey = key != null && key.isNotEmpty;
+    setState(() => _hasTailscaleKey = hasKey);
+    if (hasKey) await _loadDevices();
+  }
+
+  Future<void> _loadDevices() async {
+    final key = await TailscaleService.apiKey();
+    if (!mounted) return;
+    if (key == null || key.isEmpty) {
+      setState(() {
+        _hasTailscaleKey = false;
+        _devices = null;
+        _devicesError = null;
+      });
+      return;
+    }
+    setState(() {
+      _devicesLoading = true;
+      _devicesError = null;
+    });
+    try {
+      final devices = await TailscaleService.fetchDevices(key);
+      if (!mounted) return;
+      final values = devices.map((d) => d.bestAddress).toSet();
+      setState(() {
+        _devices = devices;
+        _devicesLoading = false;
+        if (_pickedDevice != null && !values.contains(_pickedDevice)) {
+          _pickedDevice = null;
+        }
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _devices = null;
+        _devicesError = '$e';
+        _devicesLoading = false;
+      });
+    }
+  }
+
+  Future<void> _configureTailscaleKey() async {
+    final controller =
+        TextEditingController(text: await TailscaleService.apiKey() ?? '');
+    if (!mounted) return;
+    final hadKey = controller.text.isNotEmpty;
+    final choice = await showDialog<int>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Tailscale API Key'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              '手机端读不到本机 tailscaled，所以"自动列出在线设备"需要一把 API Key：'
+              'Tailscale 后台 → Settings → Keys → Generate access token（只读 devices 即可）。'
+              '不配置也完全能用，手动填主机名 / IP 就行。',
+              style: TextStyle(
+                color: AppTheme.textDim,
+                fontSize: 12.5,
+                height: 1.5,
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: controller,
+              autofocus: true,
+              obscureText: true,
+              decoration: const InputDecoration(hintText: 'tskey-api-…'),
+            ),
+          ],
+        ),
+        actions: [
+          if (hadKey)
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(2),
+              child: const Text('清除'),
+            ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(0),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(minimumSize: const Size(0, 40)),
+            onPressed: () => Navigator.of(ctx).pop(1),
+            child: const Text('保存'),
+          ),
+        ],
+      ),
+    );
+    if (!mounted || choice == null || choice == 0) {
+      controller.dispose();
+      return;
+    }
+    if (choice == 2) {
+      await TailscaleService.setApiKey(null);
+    } else {
+      await TailscaleService.setApiKey(controller.text);
+    }
+    controller.dispose();
+    await _initTailscale();
+  }
+
+  Widget _tailscalePicker() {
+    final devices = _devices;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Expanded(child: _label2('从 Tailscale 选择（可选）')),
+            if (_devicesLoading)
+              const Padding(
+                padding: EdgeInsets.only(right: 8, bottom: 6),
+                child: SizedBox(
+                  width: 14,
+                  height: 14,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+              )
+            else
+              IconButton(
+                visualDensity: VisualDensity.compact,
+                tooltip: '刷新设备列表',
+                onPressed: _hasTailscaleKey ? _loadDevices : null,
+                icon: const Icon(Icons.refresh_rounded, size: 18),
+              ),
+          ],
+        ),
+        if (devices != null && devices.isNotEmpty)
+          DropdownButtonFormField<String>(
+            initialValue: _pickedDevice,
+            isExpanded: true,
+            decoration: const InputDecoration(hintText: '选一台设备，自动填主机名'),
+            items: [
+              for (final d in devices)
+                DropdownMenuItem<String>(
+                  value: d.bestAddress,
+                  child: Text(
+                    '${d.title}    ${d.subtitle}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+            ],
+            onChanged: (value) {
+              if (value == null) return;
+              setState(() => _pickedDevice = value);
+              _host.text = value;
+              if (_label.text.trim().isEmpty) {
+                final match = devices.where((d) => d.bestAddress == value);
+                if (match.isNotEmpty) {
+                  final d = match.first;
+                  _label.text = d.hostname.isNotEmpty ? d.hostname : value;
+                }
+              }
+            },
+          )
+        else
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+            decoration: BoxDecoration(
+              color: AppTheme.surfaceAlt,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: AppTheme.border),
+            ),
+            child: Text(
+              _devicesError ??
+                  (_hasTailscaleKey
+                      ? '这台 tailnet 里没有设备'
+                      : '未配置 API Key —— 用下面的「主机名 / IP」手动填即可'),
+              style: const TextStyle(color: AppTheme.textDim, fontSize: 12.5),
+            ),
+          ),
+        TextButton.icon(
+          onPressed: _configureTailscaleKey,
+          icon: const Icon(Icons.key_rounded, size: 18),
+          label: Text(
+            _hasTailscaleKey ? '更换 / 清除 Tailscale API Key' : '配置 Tailscale API Key（自动列出在线设备）',
+            style: const TextStyle(fontSize: 13),
+          ),
+        ),
+      ],
+    );
   }
 
   @override
@@ -125,6 +325,8 @@ class _HostEditScreenState extends State<HostEditScreen> {
                 ),
                 textInputAction: TextInputAction.next,
               ),
+              const SizedBox(height: 16),
+              _tailscalePicker(),
               const SizedBox(height: 16),
               _label2('主机名 / IP'),
               TextFormField(

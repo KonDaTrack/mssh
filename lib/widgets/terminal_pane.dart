@@ -12,11 +12,11 @@ import '../theme.dart';
 
 /// A single interactive shell rendered with xterm.
 ///
-/// Voice input rides on the OS keyboard: the ⌨ button calls
-/// [TerminalViewState.requestKeyboard], which pops the platform IME — so the
-/// phone's built-in dictation mic types straight into the terminal. Real
-/// control keys (Enter / Esc / arrows / ^C…) are on the toolbar because the
-/// soft keyboard can't produce them.
+/// The toolbar's ⌨ button raises and lowers the phone's on-screen keyboard via
+/// [TerminalViewState.requestKeyboard] / [TerminalViewState.closeKeyboard] —
+/// both typing and dictation through the keyboard's own microphone go straight
+/// into the terminal. Real control keys (Enter / Esc / arrows / ^C…) live on
+/// the toolbar because the soft keyboard can't produce them.
 class TerminalPane extends StatefulWidget {
   const TerminalPane({
     super.key,
@@ -44,6 +44,9 @@ class _TerminalPaneState extends State<TerminalPane> {
   _Status _status = _Status.connecting;
   Object? _error;
   bool _disposed = false;
+
+  /// Mirrors the on-screen keyboard, for the toggle button's label.
+  bool _keyboard = false;
 
   @override
   void initState() {
@@ -117,8 +120,25 @@ class _TerminalPaneState extends State<TerminalPane> {
     _session?.write(Uint8List.fromList(<int>[code]));
   }
 
+  /// Tapping the terminal should always bring the keyboard up.
   void _showKeyboard() {
     _viewKey.currentState?.requestKeyboard();
+    if (!_keyboard) setState(() => _keyboard = true);
+  }
+
+  /// Toolbar button: raise the keyboard if it's down, lower it if it's up.
+  /// Reads the live input-connection state so the toggle stays honest even if
+  /// the keyboard was dismissed some other way.
+  void _toggleKeyboard() {
+    final state = _viewKey.currentState;
+    if (state == null) return;
+    final visible = state.hasInputConnection;
+    if (visible) {
+      state.closeKeyboard();
+    } else {
+      state.requestKeyboard();
+    }
+    if (_keyboard != !visible) setState(() => _keyboard = !visible);
   }
 
   @override
@@ -208,7 +228,11 @@ class _TerminalPaneState extends State<TerminalPane> {
             ),
           ),
           const SizedBox(width: 6),
-          _key2('⌨ 语音', _showKeyboard, primary: true),
+          _key2(
+            _keyboard ? '⌨ 收起键盘' : '⌨ 键盘',
+            _toggleKeyboard,
+            primary: true,
+          ),
           const SizedBox(width: 6),
           _key2('⏎', () => _key(TerminalKey.enter), primary: true),
         ],

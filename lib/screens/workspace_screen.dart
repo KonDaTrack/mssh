@@ -111,6 +111,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
       message = await Transfers.download(
         files,
         entry,
+        connection: _connection,
         onProgress: (f) => progress.value = f,
         shareOrigin: _shareOrigin(),
       );
@@ -180,13 +181,22 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
               ),
             ),
             const Divider(height: 1),
-            if (entry.isDirectory)
+            if (entry.isDirectory) ...[
               ListTile(
                 leading: const Icon(Icons.upload_file_rounded),
                 title: const Text('上传文件到此目录'),
                 onTap: () => Navigator.of(ctx).pop('upload'),
-              )
-            else
+              ),
+              ListTile(
+                leading: const Icon(Icons.folder_zip_rounded),
+                title: const Text('下载此文件夹到本机'),
+                subtitle: const Text(
+                  '在远端打包成压缩包后下载',
+                  style: TextStyle(color: AppTheme.textDim, fontSize: 12),
+                ),
+                onTap: () => Navigator.of(ctx).pop('download'),
+              ),
+            ] else
               ListTile(
                 leading: const Icon(Icons.download_rounded),
                 title: const Text('下载到本机'),

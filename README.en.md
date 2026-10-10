@@ -27,13 +27,16 @@ iOS requires building it yourself with Xcode — see below.
 - **Files**: an expandable, lazily-loaded directory tree; tap a file to preview it on the right —
   text with line numbers, images with pinch-zoom, binary as a hex dump.
 - **Upload / download** (VS Code sidebar style): **long-press a file** → "download to device",
-  **long-press a folder** → "upload files into this folder"; the preview pane also has a download
-  button and the app bar an "upload to home" action. Transfers show a progress bar.
+  **long-press a folder** → "upload files into this folder" / "download this folder"; the preview
+  pane also has a download button and the app bar an "upload to home" action. Transfers show a
+  progress bar.
+- **Tailscale integration**: when adding a host you can pick from the **online devices in your
+  tailnet**; with no API key or no network it just falls back to typing the address by hand.
 - **Terminals**: multiple tabs, each an independent shell; a new terminal can take a **startup
   command** (e.g. `claude`) that runs automatically once connected.
-- **Voice input**: the terminal toolbar's "⌨ 语音" button raises the system IME — speak with the
-  keyboard's own microphone. Keys the soft keyboard can't produce (Enter / Esc / arrows / `^C` /
-  pipe, …) are on the toolbar.
+- **Keyboard / voice**: the terminal toolbar's "⌨ 键盘" button raises and lowers the phone's
+  on-screen keyboard; talk into the keyboard's own microphone to type. Keys the soft keyboard can't
+  produce (Enter / Esc / arrows / `^C` / pipe, …) are on the toolbar too.
 
 ## Layout
 
@@ -46,11 +49,11 @@ Host list ──tap a host──▶ Workspace
 
 - Wide screens (≥720dp — landscape / tablet) split the Files tab left/right; on a portrait phone
   tapping a file shows a full-screen preview with a back button.
-- Terminal toolbar: `esc tab ↑ ↓ ← → ^C ^D ^Z ^L / -` plus large `⌨ 语音` and `⏎` buttons.
+- Terminal toolbar: `esc tab ↑ ↓ ← → ^C ^D ^Z ^L / -` plus large `⌨ 键盘` and `⏎` buttons.
 
-## How voice input works
+## Keyboard & voice input
 
-1. Open **Terminals** and tap **⌨ 语音** → the system keyboard appears.
+1. Open **Terminals** and tap **⌨ 键盘** → the system keyboard appears (tap again to hide it).
 2. Tap the **microphone** on your keyboard and speak → the text lands on the terminal input line.
 3. Tap the **⏎** button to submit.
 
@@ -65,6 +68,9 @@ to TUI apps like `claude`: speaking is typing, Enter submits.
   share sheet (so you can save or forward them) — a big download never has to fit in memory.
 - **Upload**: long-press a **folder** → "upload files into this folder", or tap ⬆ in the app bar to
   upload into the home directory. Multi-select is supported.
+- **Download a folder**: long-press it → "download this folder" — the remote side packs it (zip when
+  available, otherwise tar.gz), the archive is streamed down, and the temp file is deleted on the
+  server afterwards.
 - Transfers run behind a progress dialog; on completion only the affected folder reloads, so the rest
   of the expanded tree stays put.
 
@@ -74,6 +80,14 @@ The app doesn't care whether you're on a LAN — it just needs to reach SSH. Wit
 **enter the machine's MagicDNS name as the host** (e.g. `my-desktop` or
 `my-desktop.tailnet-xxxx.ts.net`); as long as the phone is on the same tailnet it connects directly,
 no IPs to remember.
+
+**Picking a device automatically**: the add-host screen can list the **online devices in your
+tailnet** in a dropdown and fill the address for you. A phone app can't read `tailscaled`'s local
+API (the Tailscale app doesn't expose it), so this needs a Tailscale **API key**
+(admin console → Settings → Keys → Generate access token, read-only on devices is enough); it's
+stored once in the platform secure store. It's entirely optional — typing hostname / IP by hand
+works the same, and the picker silently falls back to manual entry when the key is missing or the
+network is down.
 
 ## Build & install
 

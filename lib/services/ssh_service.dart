@@ -106,6 +106,30 @@ class SshConnection {
     return out.toString();
   }
 
+  /// Like [run], but also captures stderr and the exit code — needed when the
+  /// caller has to branch on success (e.g. is `zip` installed?).
+  Future<CommandResult> runFull(String command) async {
+    final session = await _client.execute(command);
+    final out = StringBuffer();
+    final err = StringBuffer();
+    final subOut = session.stdout
+        .cast<List<int>>()
+        .transform(const Utf8Decoder(allowMalformed: true))
+        .listen(out.write);
+    final subErr = session.stderr
+        .cast<List<int>>()
+        .transform(const Utf8Decoder(allowMalformed: true))
+        .listen(err.write);
+    await session.done;
+    await subOut.cancel();
+    await subErr.cancel();
+    return CommandResult(
+      exitCode: session.exitCode ?? -1,
+      stdout: out.toString(),
+      stderr: err.toString(),
+    );
+  }
+
   Future<void> close() async {
     try {
       await _sftp?.close();
@@ -114,4 +138,19 @@ class SshConnection {
     }
     await _client.close();
   }
+}
+
+/// Result of a non-interactive command run: exit code plus both streams.
+class CommandResult {
+  const CommandResult({
+    required this.exitCode,
+    required this.stdout,
+    required this.stderr,
+  });
+
+  final int exitCode;
+  final String stdout;
+  final String stderr;
+
+  bool get ok => exitCode == 0;
 }
