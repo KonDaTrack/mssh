@@ -11,6 +11,13 @@
 
 ---
 
+## 下载安装（Android）
+
+从 [**Releases**](https://github.com/KonDaTrack/mssh/releases) 页面下载最新的 `mssh-*.apk`，
+传到手机点击安装即可（首次需允许「安装未知来源应用」）。iOS 需要自己用 Xcode 构建，见下文。
+
+> APK 用 debug 密钥签名（Flutter 模板默认），自用没问题；要上架请自行配置签名。
+
 ## 功能
 
 - **主机管理**：添加 / 编辑 / 删除主机，密码或 PEM 私钥登录。私钥和密码存在系统安全存储

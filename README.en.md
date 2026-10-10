@@ -11,6 +11,15 @@ no server side**: the phone runs its own SSH client (`dartssh2`) and connects di
 
 ---
 
+## Download (Android)
+
+Grab the latest `mssh-*.apk` from the [**Releases**](https://github.com/KonDaTrack/mssh/releases)
+page, copy it to your phone and tap to install (allow "install unknown apps" the first time).
+iOS requires building it yourself with Xcode — see below.
+
+> The APK is signed with the debug key (Flutter's template default) — fine for personal use.
+> Configure your own signing before publishing.
+
 ## Features
 
 - **Hosts**: add / edit / delete hosts; log in with a password or a PEM private key. Secrets live in
