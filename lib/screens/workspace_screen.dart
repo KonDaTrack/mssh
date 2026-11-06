@@ -12,6 +12,7 @@ import '../util/format.dart';
 import '../widgets/file_preview.dart';
 import '../widgets/file_tree.dart';
 import '../widgets/terminal_pane.dart';
+import 'agents_screen.dart';
 
 /// Per-host workspace: a file browser and one or more terminals, all riding on
 /// a single SSH connection.
@@ -343,6 +344,11 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
             selectedIcon: Icon(Icons.terminal_rounded),
             label: '终端',
           ),
+          NavigationDestination(
+            icon: Icon(Icons.smart_toy_outlined),
+            selectedIcon: Icon(Icons.smart_toy_rounded),
+            label: 'Agents',
+          ),
         ],
       ),
     );
@@ -382,6 +388,19 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
           onSelect: (i) => setState(() => _activeTerminal = i),
           onAdd: _addTerminal,
           onClose: _closeTerminal,
+        ),
+        AgentsScreen(
+          connection: _connection!,
+          onLaunch: (command, label) {
+            setState(() {
+              _terminals.add(_TerminalSpec(
+                id: _nextTerminalId++,
+                command: command,
+              ));
+              _activeTerminal = _terminals.length - 1;
+              _tab = 1; // switch to terminal tab
+            });
+          },
         ),
       ],
     );
@@ -467,7 +486,12 @@ class _FileBrowserState extends State<_FileBrowser> {
       files: widget.files,
       entry: selected,
       onBack: showBack ? () => setState(() => _selected = null) : null,
-      onDownload: () => widget.onDownload(selected),
+      onDownload: selected.isDirectory
+          ? null
+          : () => widget.onDownload(selected),
+      onUpload: selected.isDirectory
+          ? () => widget.onEntryLongPress(selected)
+          : null,
     );
   }
 }

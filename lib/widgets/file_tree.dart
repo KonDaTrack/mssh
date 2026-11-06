@@ -158,8 +158,20 @@ class FileTreeState extends State<FileTree> {
           ? null
           : () => widget.onLongPress!(e),
       child: Container(
-        color: selected ? AppTheme.accent.withValues(alpha: 0.16) : null,
-        padding: EdgeInsets.fromLTRB(6 + node.depth * 16, 7, 10, 7),
+        decoration: BoxDecoration(
+          color: selected ? AppTheme.accent.withValues(alpha: 0.12) : null,
+          border: selected
+              ? const Border(
+                  left: BorderSide(color: AppTheme.accent, width: 3),
+                )
+              : null,
+        ),
+        padding: EdgeInsets.fromLTRB(
+          6 + node.depth * 16,
+          11,
+          12,
+          11,
+        ),
         child: Row(
           children: [
             if (e.isDirectory)
@@ -167,30 +179,38 @@ class FileTreeState extends State<FileTree> {
                 node.expanded
                     ? Icons.keyboard_arrow_down_rounded
                     : Icons.keyboard_arrow_right_rounded,
-                size: 18,
+                size: 20,
                 color: AppTheme.textDim,
               )
             else
-              const SizedBox(width: 18),
+              const SizedBox(width: 20),
             const SizedBox(width: 2),
             Icon(
               iconForEntry(e.name, e.isDirectory, isSymlink: e.isSymlink),
-              size: 17,
+              size: 20,
               color: e.isDirectory ? AppTheme.accent : AppTheme.textDim,
             ),
-            const SizedBox(width: 8),
+            const SizedBox(width: 10),
             Expanded(
               child: Text(
                 e.name,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(fontSize: 14),
+                style: TextStyle(
+                  fontSize: 15.5,
+                  fontWeight: e.isDirectory
+                      ? FontWeight.w500
+                      : FontWeight.w400,
+                ),
               ),
             ),
             if (!e.isDirectory)
               Text(
                 humanSize(e.size),
-                style: const TextStyle(color: AppTheme.textDim, fontSize: 11),
+                style: const TextStyle(
+                  color: AppTheme.textDim,
+                  fontSize: 12.5,
+                ),
               ),
           ],
         ),
